@@ -52,8 +52,22 @@ function renderChart(chartInstance, ctx, labels, values, color) {
       maintainAspectRatio: false,
       animation: false,
       scales: {
-        x: { display: false },
-        y: { display: false },
+        x: {
+          display: true,
+          grid: { display: false },
+          ticks: {
+            color: "#8b949e",
+            maxTicksLimit: 4,
+          },
+        },
+        y: {
+          display: true,
+          grid: { display: false },
+          ticks: {
+            color: "#8b949e",
+            maxTicksLimit: 4,
+          },
+        },
       },
       plugins: {
         legend: { display: false },
