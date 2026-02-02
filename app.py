@@ -112,9 +112,9 @@ def get_global_data(range_key: str = "daily"):
         range_key = "monthly"
     preset = HISTORY_PRESETS.get(range_key, HISTORY_PRESETS["daily"])
     tickers = {
-        "ONS": "GC=F",
-        "USDTRY": "TRY=X",
-        "US10Y": "^TNX",
+        "ONS": ["GC=F", "XAUUSD=X"],
+        "USDTRY": ["TRY=X"],
+        "US10Y": ["^TNX"],
     }
     result = {}
     history = {
@@ -167,13 +167,18 @@ def get_global_data(range_key: str = "daily"):
                         return close_series
                 return None
 
-            for key, symbol in tickers.items():
-                close_series = _download_close(symbol)
+            for key, symbols in tickers.items():
+                close_series = None
+                for symbol in symbols:
+                    close_series = _download_close(symbol)
+                    if close_series is not None and not close_series.empty:
+                        break
                 if close_series is not None and not close_series.empty:
                     series_map[key] = close_series
         else:
+            primary_symbols = [symbols[0] for symbols in tickers.values()]
             hist_df = yf.download(
-                ["GC=F", "TRY=X", "^TNX"],
+                primary_symbols,
                 period=preset["period"],
                 interval=interval,
                 progress=False,
@@ -186,12 +191,47 @@ def get_global_data(range_key: str = "daily"):
             if isinstance(close_df, pd.Series):
                 close_df = close_df.to_frame()
 
-            for key, symbol in tickers.items():
+            for key, symbols in tickers.items():
+                symbol = symbols[0]
                 if symbol not in close_df.columns:
                     continue
                 series = close_df[symbol].dropna()
                 if not series.empty:
                     series_map[key] = series
+
+            # Eksik kalanlar için fallback sembolleri dene
+            for key, symbols in tickers.items():
+                if key in series_map:
+                    continue
+                for symbol in symbols[1:]:
+                    try:
+                        df = yf.download(
+                            symbol,
+                            period=preset["period"],
+                            interval=interval,
+                            progress=False,
+                            threads=False,
+                        )
+                    except Exception:
+                        continue
+                    if df is None or df.empty:
+                        continue
+                    close_data = df.get("Close")
+                    if close_data is None:
+                        continue
+                    if isinstance(close_data, pd.DataFrame):
+                        if symbol in close_data.columns:
+                            close_series = close_data[symbol]
+                        elif close_data.shape[1] == 1:
+                            close_series = close_data.iloc[:, 0]
+                        else:
+                            continue
+                    else:
+                        close_series = close_data
+                    close_series = close_series.dropna()
+                    if not close_series.empty:
+                        series_map[key] = close_series
+                        break
 
         if series_map:
             history_df = pd.DataFrame(series_map).sort_index()
@@ -471,33 +511,33 @@ def metrics():
     preset = HISTORY_PRESETS.get(preset_key, HISTORY_PRESETS["daily"])
     global_data = get_global_data(range_key=range_key)
     hist = global_data.get("history", {})
-        if hist.get("dates"):
-            arb_hist = get_arbitrage_history(range_key)
-            if arb_hist["dates"]:
-                hist["arbitrage_dates"] = arb_hist["dates"]
-                hist["arbitrage_prices"] = arb_hist["values"]
-            else:
-                arb_val = round(
-                    (local.get("piyasa", {}).get("satis", 0) or 0)
-                    - (local.get("garanti", {}).get("alis", 0) or 0),
-                    2,
-                )
-                hist["arbitrage_dates"] = hist["dates"]
-                hist["arbitrage_prices"] = [arb_val for _ in hist["dates"]]
-
-            # Saatlikte tek nokta gelirse grafiği doldurmak için hizala
-            if range_key == "hourly" and hist.get("dates"):
-                if len(hist["arbitrage_dates"]) < len(hist["dates"]):
-                    last_val = hist["arbitrage_prices"][-1] if hist["arbitrage_prices"] else 0
-                    hist["arbitrage_dates"] = hist["dates"]
-                    hist["arbitrage_prices"] = [last_val for _ in hist["dates"]]
-        if hist.get("arbitrage_dates") and hist.get("arbitrage_prices") and range_key != "hourly":
-            _ensure_today_tail(
-                hist["arbitrage_dates"],
-                [hist["arbitrage_prices"]],
-                preset["date_fmt"],
-                preset.get("max_points"),
+    if hist.get("dates"):
+        arb_hist = get_arbitrage_history(range_key)
+        if arb_hist["dates"]:
+            hist["arbitrage_dates"] = arb_hist["dates"]
+            hist["arbitrage_prices"] = arb_hist["values"]
+        else:
+            arb_val = round(
+                (local.get("piyasa", {}).get("satis", 0) or 0)
+                - (local.get("garanti", {}).get("alis", 0) or 0),
+                2,
             )
+            hist["arbitrage_dates"] = hist["dates"]
+            hist["arbitrage_prices"] = [arb_val for _ in hist["dates"]]
+
+        # Saatlikte tek nokta gelirse grafiği doldurmak için hizala
+        if range_key == "hourly" and hist.get("dates"):
+            if len(hist["arbitrage_dates"]) < len(hist["dates"]):
+                last_val = hist["arbitrage_prices"][-1] if hist["arbitrage_prices"] else 0
+                hist["arbitrage_dates"] = hist["dates"]
+                hist["arbitrage_prices"] = [last_val for _ in hist["dates"]]
+    if hist.get("arbitrage_dates") and hist.get("arbitrage_prices") and range_key != "hourly":
+        _ensure_today_tail(
+            hist["arbitrage_dates"],
+            [hist["arbitrage_prices"]],
+            preset["date_fmt"],
+            preset.get("max_points"),
+        )
 
     garanti_alis = local.get("garanti", {}).get("alis", 0) or 0
     garanti_satis = local.get("garanti", {}).get("satis", 0) or 0
