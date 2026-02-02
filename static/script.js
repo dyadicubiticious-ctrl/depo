@@ -150,6 +150,45 @@ function trendColor(values, palette) {
   return pal.neu;
 }
 
+function getXAxisTickOptions() {
+  const base = { color: "#8b949e" };
+  if (currentRange === "hourly") {
+    return {
+      ...base,
+      autoSkip: false,
+      maxRotation: 90,
+      minRotation: 90,
+      font: { size: 9 },
+    };
+  }
+  if (currentRange === "daily") {
+    return {
+      ...base,
+      autoSkip: false,
+      maxRotation: 0,
+      minRotation: 0,
+      font: { size: 10 },
+    };
+  }
+  if (currentRange === "weekly") {
+    return {
+      ...base,
+      autoSkip: false,
+      maxRotation: 0,
+      minRotation: 0,
+      font: { size: 10 },
+    };
+  }
+  return {
+    ...base,
+    autoSkip: true,
+    maxTicksLimit: 8,
+    maxRotation: 0,
+    minRotation: 0,
+    font: { size: 10 },
+  };
+}
+
 function renderChart(chartInstance, ctx, labels, values, color) {
   if (!ctx || !window.Chart) return chartInstance;
   if (chartInstance) {
@@ -171,6 +210,7 @@ function renderChart(chartInstance, ctx, labels, values, color) {
         color: GRID_COLOR,
         drawBorder: false,
       };
+      chartInstance.options.scales.x.ticks = getXAxisTickOptions();
     }
     if (chartInstance.options.scales.y) {
       chartInstance.options.scales.y.grid = {
@@ -219,10 +259,7 @@ function renderChart(chartInstance, ctx, labels, values, color) {
             color: GRID_COLOR,
             drawBorder: false,
           },
-          ticks: {
-            color: "#8b949e",
-            maxTicksLimit: 4,
-          },
+          ticks: getXAxisTickOptions(),
         },
         y: {
           display: true,
@@ -297,6 +334,8 @@ function setRangeStatus(count) {
   if (Number.isFinite(count)) {
     if (currentRange === "hourly") {
       suffix = ` (${count} x 10 dk)`;
+    } else if (currentRange === "daily") {
+      suffix = ` (${count} saat)`;
     } else {
       suffix = ` (${count} gün)`;
     }
