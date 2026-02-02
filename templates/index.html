@@ -6,7 +6,7 @@
   <title>GoldInsight</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='12') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='13') }}" />
 </head>
 <body>
   <div class="ticker-bar">
@@ -63,6 +63,7 @@
           <div class="chart-wrapper">
             <canvas id="onsChart"></canvas>
           </div>
+          <div class="range-summary" id="ons-summary"></div>
           <div class="info-box">Altının dünyadaki dolar bazlı fiyatıdır. Küresel korku ve belirsizlik arttığında genelde yükselir.</div>
         </div>
         <div class="card card-small">
@@ -72,6 +73,7 @@
           <div class="chart-wrapper">
             <canvas id="usdChart"></canvas>
           </div>
+          <div class="range-summary" id="usd-summary"></div>
           <div class="info-box">Dolar kuru. Gram altının fiyatını belirleyen iki çarpanın (Ons x Dolar) yerel ayağıdır.</div>
         </div>
         <div class="card card-small">
@@ -81,6 +83,7 @@
           <div class="chart-wrapper">
             <canvas id="us10yChart"></canvas>
           </div>
+          <div class="range-summary" id="us10y-summary"></div>
           <div class="info-box">ABD devlet tahvili faizi. Bu oran yükselirse yatırımcılar altına değil faize yönelir, altın düşebilir (Ters Korelasyon).</div>
         </div>
         <div class="card card-small">
@@ -99,6 +102,7 @@
           <div class="chart-wrapper">
             <canvas id="gramChart"></canvas>
           </div>
+          <div class="range-summary" id="gram-summary"></div>
         </div>
         <div class="card card-highlight">
           <div class="card-title">ARBİTRAJ FARKI</div>
@@ -106,6 +110,7 @@
           <div class="chart-wrapper">
             <canvas id="arbitrageChart"></canvas>
           </div>
+          <div class="range-summary" id="arbitrage-summary"></div>
           <div class="info-box">Bankanız ile Kapalıçarşı (Serbest Piyasa) arasındaki fiyat farkı. Çok açılırsa fiyatlama hatası olabilir.</div>
         </div>
       </div>
@@ -144,6 +149,6 @@
     </section>
   </main>
 
-  <script src="{{ url_for('static', filename='script.js', v='12') }}"></script>
+  <script src="{{ url_for('static', filename='script.js', v='13') }}"></script>
 </body>
 </html>

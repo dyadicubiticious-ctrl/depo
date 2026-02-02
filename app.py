@@ -279,6 +279,7 @@ def get_global_data(range_key: str = "daily"):
                         series_map[key] = close_series
                         break
 
+        history_df = pd.DataFrame()
         if series_map:
             history_df = pd.DataFrame(series_map).sort_index()
             history_df = history_df.dropna(axis=1, how="all")
@@ -314,9 +315,17 @@ def get_global_data(range_key: str = "daily"):
                 if series is None or series.empty:
                     result[key] = {"price": 0, "change": 0}
                     continue
-                current = float(series.iloc[-1])
-                if len(series) > 1:
-                    prev = float(series.iloc[-2])
+
+                range_series = None
+                if not history_df.empty and key in history_df:
+                    range_series = history_df[key].dropna()
+
+                if range_series is None or range_series.empty:
+                    range_series = series
+
+                current = float(range_series.iloc[-1])
+                if len(range_series) > 1:
+                    prev = float(range_series.iloc[0])
                 else:
                     prev = current
                 change = ((current - prev) / prev) * 100 if prev != 0 else 0

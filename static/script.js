@@ -189,6 +189,50 @@ function getXAxisTickOptions() {
   };
 }
 
+function formatValue(value, decimals) {
+  if (!Number.isFinite(value)) return "--";
+  return value.toFixed(decimals);
+}
+
+function buildHourlySummary(labels, values) {
+  if (!Array.isArray(labels) || !Array.isArray(values)) return [];
+  const byHour = new Map();
+  for (let i = 0; i < labels.length; i += 1) {
+    const label = labels[i];
+    const value = values[i];
+    if (!label) continue;
+    const parts = String(label).split(":");
+    const hour = parts[0];
+    if (!hour) continue;
+    byHour.set(hour, { label: `${hour}:00`, value });
+  }
+  const items = Array.from(byHour.values());
+  return items.slice(-4);
+}
+
+function renderHourlySummary(containerId, labels, values, decimals) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (currentRange !== "hourly") {
+    el.innerHTML = "";
+    el.style.display = "none";
+    return;
+  }
+  const items = buildHourlySummary(labels, values);
+  if (!items.length) {
+    el.innerHTML = "";
+    el.style.display = "none";
+    return;
+  }
+  el.style.display = "flex";
+  el.innerHTML = items
+    .map(
+      (item) =>
+        `<span class="summary-item">${item.label} • ${formatValue(item.value, decimals)}</span>`
+    )
+    .join("");
+}
+
 function renderChart(chartInstance, ctx, labels, values, color) {
   if (!ctx || !window.Chart) return chartInstance;
   if (chartInstance) {
@@ -651,6 +695,12 @@ async function updateDashboard() {
         trendColor(arbitrageValues, CHART_PALETTE.arbitrage)
       );
     }
+
+    renderHourlySummary("ons-summary", labels, onsValues, 2);
+    renderHourlySummary("usd-summary", labels, usdValues, 4);
+    renderHourlySummary("us10y-summary", labels, us10yValues, 2);
+    renderHourlySummary("gram-summary", labels, gramValues, 2);
+    renderHourlySummary("arbitrage-summary", arbitrageLabels, arbitrageValues, 2);
   } catch (err) {
     console.error("Dashboard update failed", err);
   }
