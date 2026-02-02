@@ -150,25 +150,28 @@ function trendColor(values, palette) {
   return pal.neu;
 }
 
-function getXAxisTickOptions() {
+function getXAxisTickOptions(labelCount) {
   const base = { color: "#8b949e" };
   if (currentRange === "hourly") {
+    const step = labelCount ? Math.ceil(labelCount / 8) : 1;
     return {
       ...base,
-      autoSkip: true,
-      maxTicksLimit: 8,
-      maxRotation: 90,
-      minRotation: 90,
+      autoSkip: false,
+      maxRotation: 45,
+      minRotation: 45,
       font: { size: 9 },
+      callback: (_value, index) => (index % step === 0 ? _value : ""),
     };
   }
   if (currentRange === "daily") {
+    const step = labelCount ? Math.ceil(labelCount / 12) : 1;
     return {
       ...base,
       autoSkip: false,
       maxRotation: 0,
       minRotation: 0,
       font: { size: 10 },
+      callback: (_value, index) => (index % step === 0 ? _value : ""),
     };
   }
   if (currentRange === "weekly") {
@@ -178,6 +181,17 @@ function getXAxisTickOptions() {
       maxRotation: 0,
       minRotation: 0,
       font: { size: 10 },
+    };
+  }
+  if (currentRange === "monthly") {
+    const step = labelCount ? Math.ceil(labelCount / 10) : 1;
+    return {
+      ...base,
+      autoSkip: false,
+      maxRotation: 0,
+      minRotation: 0,
+      font: { size: 10 },
+      callback: (_value, index) => (index % step === 0 ? _value : ""),
     };
   }
   return {
@@ -255,7 +269,9 @@ function renderChart(chartInstance, ctx, labels, values, color) {
         color: GRID_COLOR,
         drawBorder: false,
       };
-      chartInstance.options.scales.x.ticks = getXAxisTickOptions();
+      chartInstance.options.scales.x.ticks = getXAxisTickOptions(
+        Array.isArray(labels) ? labels.length : 0
+      );
     }
     if (chartInstance.options.scales.y) {
       chartInstance.options.scales.y.grid = {
@@ -304,7 +320,7 @@ function renderChart(chartInstance, ctx, labels, values, color) {
             color: GRID_COLOR,
             drawBorder: false,
           },
-          ticks: getXAxisTickOptions(),
+          ticks: getXAxisTickOptions(Array.isArray(labels) ? labels.length : 0),
         },
         y: {
           display: true,
