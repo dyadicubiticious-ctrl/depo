@@ -91,9 +91,9 @@ TRANSLATE_CACHE = {}
 
 HISTORY_PRESETS = {
     "hourly": {"period": "2d", "interval": "5m", "date_fmt": "%H:%M", "max_points": 144},
-    "daily": {"period": "1mo", "interval": "1d", "date_fmt": "%d %b", "max_points": 3},
-    "weekly": {"period": "1mo", "interval": "1d", "date_fmt": "%d %b", "max_points": 7},
-    "monthly": {"period": "3mo", "interval": "1d", "date_fmt": "%d %b", "max_points": 30},
+    "daily": {"period": "2d", "interval": "1h", "date_fmt": "%H:%M", "max_points": 24},
+    "weekly": {"period": "7d", "interval": "1d", "date_fmt": "%d %b", "max_points": 7},
+    "monthly": {"period": "1mo", "interval": "1d", "date_fmt": "%d %b", "max_points": 30},
 }
 
 
@@ -286,6 +286,10 @@ def get_global_data(range_key: str = "daily"):
                 history_df = history_df.ffill().bfill()
                 if range_key == "hourly":
                     history_df = history_df.resample("10min").last().ffill()
+                elif range_key == "daily":
+                    history_df = history_df.resample("1h").last().ffill()
+                elif range_key in {"weekly", "monthly"}:
+                    history_df = history_df.resample("D").last().ffill()
                 max_points = preset.get("max_points")
                 if max_points:
                     history_df = history_df.tail(max_points)
@@ -321,7 +325,7 @@ def get_global_data(range_key: str = "daily"):
                     "change": round(change, 2),
                 }
 
-            if history["dates"] and range_key != "hourly":
+            if history["dates"] and range_key not in {"hourly", "daily"}:
                 _ensure_today_tail(
                     history["dates"],
                     [
@@ -407,11 +411,12 @@ def get_arbitrage_history(range_key: str):
         if range_key == "hourly":
             series = df["arbitrage"].resample("10min").last().ffill().dropna().tail(144)
             date_fmt = "%H:%M"
+        elif range_key == "daily":
+            series = df["arbitrage"].resample("H").last().ffill().dropna().tail(24)
+            date_fmt = "%H:%M"
         else:
-            series = df["arbitrage"].resample("D").last().dropna()
-            if range_key == "daily":
-                series = series.tail(3)
-            elif range_key == "weekly":
+            series = df["arbitrage"].resample("D").last().ffill().dropna()
+            if range_key == "weekly":
                 series = series.tail(7)
             else:
                 series = series.tail(30)
@@ -577,7 +582,7 @@ def metrics():
                 last_val = hist["arbitrage_prices"][-1] if hist["arbitrage_prices"] else 0
                 hist["arbitrage_dates"] = hist["dates"]
                 hist["arbitrage_prices"] = [last_val for _ in hist["dates"]]
-    if hist.get("arbitrage_dates") and hist.get("arbitrage_prices") and range_key != "hourly":
+    if hist.get("arbitrage_dates") and hist.get("arbitrage_prices") and range_key not in {"hourly", "daily"}:
         _ensure_today_tail(
             hist["arbitrage_dates"],
             [hist["arbitrage_prices"]],
