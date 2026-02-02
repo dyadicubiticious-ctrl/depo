@@ -6,6 +6,8 @@
   --accent-green: #16c784;
   --accent-red: #ff4d4d;
   --accent-yellow: #f5c451;
+  --font-sans: "IBM Plex Sans", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
 }
 
 * {
@@ -16,7 +18,8 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: "JetBrains Mono", "Courier New", monospace;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }
 
 .ticker-bar {
@@ -33,7 +36,7 @@ body {
   background: var(--accent-red);
   color: #fff;
   font-weight: 700;
-  font-size: 12px;
+  font-size: 14px;
   padding: 4px 8px;
   border-radius: 6px;
   letter-spacing: 0.5px;
@@ -48,9 +51,10 @@ body {
 .ticker-text {
   display: inline-block;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--accent-red);
   animation: ticker-scroll 30s linear infinite;
+  font-family: var(--font-mono);
 }
 
 @keyframes ticker-scroll {
@@ -78,15 +82,16 @@ body {
 }
 
 .logo {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--accent-yellow);
   letter-spacing: 1px;
 }
 
 .clock {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text);
+  font-family: var(--font-mono);
 }
 
 .refresh-btn {
@@ -95,7 +100,7 @@ body {
   color: var(--text);
   padding: 6px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
   transition: border-color 0.2s ease, color 0.2s ease;
 }
@@ -126,8 +131,9 @@ body {
 }
 
 .range-status {
-  font-size: 12px;
+  font-size: 14px;
   color: #8b949e;
+  font-family: var(--font-mono);
 }
 
 .range-buttons {
@@ -141,7 +147,7 @@ body {
   color: var(--text);
   padding: 6px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
   transition: border-color 0.2s ease, color 0.2s ease;
 }
@@ -200,21 +206,37 @@ body {
 }
 
 .card-title {
-  font-size: 12px;
+  font-size: 14px;
   color: #8b949e;
   text-transform: uppercase;
   letter-spacing: 1px;
   margin-bottom: 6px;
 }
 
+.card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.refresh-btn.mini {
+  padding: 4px 8px;
+  font-size: 13px;
+  border-radius: 5px;
+}
+
 .card-value {
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
+  font-family: var(--font-mono);
 }
 
 .card-sub {
-  font-size: 12px;
+  font-size: 14px;
   margin-top: 4px;
+  font-family: var(--font-mono);
 }
 
 .calc-row {
@@ -233,7 +255,7 @@ body {
 }
 
 .calc-result {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--accent-yellow);
 }
 
@@ -254,14 +276,14 @@ body {
   border: 1px solid #30363d;
   border-radius: 8px;
   padding: 10px 12px;
-  font-size: 12px;
+  font-size: 14px;
   color: #c9d1d9;
   line-height: 1.4;
   margin-bottom: 12px;
 }
 
 .news-time {
-  font-size: 12px;
+  font-size: 14px;
   color: #8b949e;
 }
 
@@ -272,7 +294,7 @@ body {
 }
 
 .news-title {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--accent-yellow);
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -297,7 +319,7 @@ body {
 .news-item a {
   color: var(--text);
   text-decoration: none;
-  font-size: 12px;
+  font-size: 14px;
   display: block;
   line-height: 1.4;
 }
@@ -307,13 +329,14 @@ body {
 }
 
 .news-meta {
-  font-size: 11px;
+  font-size: 13px;
   color: #8b949e;
   margin-top: 2px;
+  font-family: var(--font-mono);
 }
 
 .status-text {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.4;
   color: #c9d1d9;
 }
@@ -331,7 +354,7 @@ body {
   background: #0b0f14;
   border: 1px solid #30363d;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 14px;
   color: #9aa4af;
   line-height: 1.4;
 }
@@ -385,7 +408,7 @@ canvas {
     justify-content: space-between;
   }
   .card-value {
-    font-size: 20px;
+    font-size: 22px;
   }
 }
 
@@ -395,7 +418,7 @@ canvas {
   cursor: help;
   color: #58a6ff; /* Mavi bilgilendirme rengi */
   margin-left: 5px;
-  font-size: 0.9em;
+  font-size: 1em;
   position: relative;
 }
 
@@ -414,7 +437,7 @@ canvas {
   border-radius: 6px;
   white-space: pre-wrap; /* Uzun metinleri alt satıra al */
   width: 200px; /* Genişlik sınırı */
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-family: sans-serif;
   line-height: 1.4;
   text-align: center;

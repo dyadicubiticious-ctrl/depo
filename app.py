@@ -90,9 +90,10 @@ NEWS_TTL_SECONDS = 300
 TRANSLATE_CACHE = {}
 
 HISTORY_PRESETS = {
-    "daily": {"period": "1mo", "interval": "1d", "date_fmt": "%d %b"},
-    "weekly": {"period": "6mo", "interval": "1wk", "date_fmt": "%d %b"},
-    "yearly": {"period": "1y", "interval": "1wk", "date_fmt": "%b %y"},
+    "hourly": {"period": "2d", "interval": "5m", "date_fmt": "%H:%M", "max_points": 144},
+    "daily": {"period": "1mo", "interval": "1d", "date_fmt": "%d %b", "max_points": 3},
+    "weekly": {"period": "1mo", "interval": "1d", "date_fmt": "%d %b", "max_points": 7},
+    "monthly": {"period": "3mo", "interval": "1d", "date_fmt": "%d %b", "max_points": 30},
 }
 
 
@@ -105,8 +106,10 @@ def get_global_data(range_key: str = "daily"):
     """
     ONS Altin (GC=F), USD/TRY (TRY=X) ve ABD 10Y (^TNX) verilerini çeker.
     Son kapanış ve yüzde değişimi döndürür.
-    Ayrıca ONS ve USD/TRY için son 30 gün kapanış serisini döndürür.
+    Ayrıca ONS ve USD/TRY için seçilen aralığa göre kapanış serisini döndürür.
     """
+    if range_key == "yearly":
+        range_key = "monthly"
     preset = HISTORY_PRESETS.get(range_key, HISTORY_PRESETS["daily"])
     tickers = {
         "ONS": "GC=F",
@@ -124,50 +127,116 @@ def get_global_data(range_key: str = "daily"):
         "arbitrage_dates": [],
     }
     try:
-        hist_df = yf.download(
-            ["GC=F", "TRY=X", "^TNX"],
-            period=preset["period"],
-            interval=preset["interval"],
-            progress=False,
-        )
-        if isinstance(hist_df.columns, pd.MultiIndex):
-            close_df = hist_df["Close"]
+        series_map = {}
+        interval = preset["interval"]
+        intraday = interval in {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"}
+
+        if intraday:
+            # Intraday'de çoklu sembol indirme bazen boş dönebildiği için tek tek çek
+            for key, symbol in tickers.items():
+                try:
+                    df = yf.download(
+                        symbol,
+                        period=preset["period"],
+                        interval=interval,
+                        progress=False,
+                        threads=False,
+                    )
+                except Exception:
+                    continue
+                if df is None or df.empty:
+                    continue
+                close_data = df.get("Close")
+                if close_data is None:
+                    continue
+                if isinstance(close_data, pd.DataFrame):
+                    if symbol in close_data.columns:
+                        close_series = close_data[symbol]
+                    elif close_data.shape[1] == 1:
+                        close_series = close_data.iloc[:, 0]
+                    else:
+                        continue
+                else:
+                    close_series = close_data
+                close_series = close_series.dropna()
+                if not close_series.empty:
+                    series_map[key] = close_series
         else:
-            close_df = hist_df
-        if isinstance(close_df, pd.Series):
-            close_df = close_df.to_frame()
-        if "GC=F" in close_df.columns and "TRY=X" in close_df.columns and "^TNX" in close_df.columns:
-            close_df = close_df[["GC=F", "TRY=X", "^TNX"]].dropna()
-            history["dates"] = [idx.strftime(preset["date_fmt"]) for idx in close_df.index]
-            ons_list = [float(v) for v in close_df["GC=F"].tolist()]
-            usd_list = [float(v) for v in close_df["TRY=X"].tolist()]
-            us10y_list = [float(v) for v in close_df["^TNX"].tolist()]
+            hist_df = yf.download(
+                ["GC=F", "TRY=X", "^TNX"],
+                period=preset["period"],
+                interval=interval,
+                progress=False,
+                threads=False,
+            )
+            if isinstance(hist_df.columns, pd.MultiIndex):
+                close_df = hist_df["Close"]
+            else:
+                close_df = hist_df
+            if isinstance(close_df, pd.Series):
+                close_df = close_df.to_frame()
 
-            history["ons_prices"] = [round(v, 2) for v in ons_list]
-            history["usd_prices"] = [round(v, 4) for v in usd_list]
-            history["us10y_prices"] = [round(v, 2) for v in us10y_list]
+            for key, symbol in tickers.items():
+                if symbol not in close_df.columns:
+                    continue
+                series = close_df[symbol].dropna()
+                if not series.empty:
+                    series_map[key] = series
 
-            gram_list = [round(ons * usd / 31.1035, 2) for ons, usd in zip(ons_list, usd_list)]
-            history["gram_prices"] = gram_list
-            history["arbitrage_prices"] = []
-            history["arbitrage_dates"] = []
+        if series_map:
+            history_df = pd.DataFrame(series_map).sort_index()
+            history_df = history_df.dropna(axis=1, how="all")
+            if not history_df.empty:
+                history_df = history_df.ffill().bfill()
+                if range_key == "hourly":
+                    history_df = history_df.resample("10min").last().ffill()
+                max_points = preset.get("max_points")
+                if max_points:
+                    history_df = history_df.tail(max_points)
 
-            series_map = {
-                "ONS": ons_list,
-                "USDTRY": usd_list,
-                "US10Y": us10y_list,
-            }
-            for key, series in series_map.items():
-                if len(series) < 2:
+                history["dates"] = [idx.strftime(preset["date_fmt"]) for idx in history_df.index]
+                if "ONS" in history_df:
+                    history["ons_prices"] = [round(float(v), 2) for v in history_df["ONS"].tolist()]
+                if "USDTRY" in history_df:
+                    history["usd_prices"] = [round(float(v), 4) for v in history_df["USDTRY"].tolist()]
+                if "US10Y" in history_df:
+                    history["us10y_prices"] = [round(float(v), 2) for v in history_df["US10Y"].tolist()]
+
+                if "ONS" in history_df and "USDTRY" in history_df:
+                    gram_series = history_df["ONS"] * history_df["USDTRY"] / 31.1035
+                    history["gram_prices"] = [round(float(v), 2) for v in gram_series.tolist()]
+
+                history["arbitrage_prices"] = []
+                history["arbitrage_dates"] = []
+
+            for key in ["ONS", "USDTRY", "US10Y"]:
+                series = series_map.get(key)
+                if series is None or series.empty:
                     result[key] = {"price": 0, "change": 0}
                     continue
-                current = float(series[-1])
-                prev = float(series[-2])
+                current = float(series.iloc[-1])
+                if len(series) > 1:
+                    prev = float(series.iloc[-2])
+                else:
+                    prev = current
                 change = ((current - prev) / prev) * 100 if prev != 0 else 0
                 result[key] = {
                     "price": round(current, 2),
                     "change": round(change, 2),
                 }
+
+            if history["dates"] and range_key != "hourly":
+                _ensure_today_tail(
+                    history["dates"],
+                    [
+                        history["ons_prices"],
+                        history["usd_prices"],
+                        history["us10y_prices"],
+                        history["gram_prices"],
+                    ],
+                    preset["date_fmt"],
+                    preset.get("max_points"),
+                )
     except Exception:
         result = {
             "ONS": {"price": 0, "change": 0},
@@ -237,18 +306,19 @@ def get_arbitrage_history(range_key: str):
         if df.empty:
             return {"dates": [], "values": []}
         df = df.sort_values("timestamp").set_index("timestamp")
-        now = pd.Timestamp.now()
-        if range_key == "weekly":
-            start = now - pd.Timedelta(days=180)
-            series = df.loc[start:]["arbitrage"].resample("W").last().dropna()
-            date_fmt = "%d %b"
-        elif range_key == "yearly":
-            start = now - pd.Timedelta(days=365)
-            series = df.loc[start:]["arbitrage"].resample("W").last().dropna()
-            date_fmt = "%b %y"
+        if range_key == "yearly":
+            range_key = "monthly"
+        if range_key == "hourly":
+            series = df["arbitrage"].resample("10min").last().ffill().dropna().tail(144)
+            date_fmt = "%H:%M"
         else:
-            start = now - pd.Timedelta(days=30)
-            series = df.loc[start:]["arbitrage"].resample("D").last().dropna()
+            series = df["arbitrage"].resample("D").last().dropna()
+            if range_key == "daily":
+                series = series.tail(3)
+            elif range_key == "weekly":
+                series = series.tail(7)
+            else:
+                series = series.tail(30)
             date_fmt = "%d %b"
         return {
             "dates": [idx.strftime(date_fmt) for idx in series.index],
@@ -266,6 +336,23 @@ def _format_pubdate(pubdate: str):
         return dt.strftime("%d %b %H:%M")
     except Exception:
         return pubdate
+
+
+def _ensure_today_tail(dates, series_list, date_fmt, max_points=None):
+    if not dates:
+        return
+    today_label = datetime.now().strftime(date_fmt)
+    if dates[-1] != today_label:
+        dates.append(today_label)
+        for series in series_list:
+            if series:
+                series.append(series[-1])
+    if max_points and len(dates) > max_points:
+        keep = max_points
+        del dates[:-keep]
+        for series in series_list:
+            if series and len(series) > keep:
+                del series[:-keep]
 
 
 def _fetch_google_news(query: str, hl: str, gl: str, ceid: str, limit: int = 6):
@@ -370,6 +457,8 @@ def metrics():
     local = get_local_gold_data()
     log_arbitrage(local)
     range_key = request.args.get("range", "daily")
+    preset_key = "monthly" if range_key == "yearly" else range_key
+    preset = HISTORY_PRESETS.get(preset_key, HISTORY_PRESETS["daily"])
     global_data = get_global_data(range_key=range_key)
     hist = global_data.get("history", {})
     if hist.get("dates"):
@@ -385,6 +474,13 @@ def metrics():
             )
             hist["arbitrage_dates"] = hist["dates"]
             hist["arbitrage_prices"] = [arb_val for _ in hist["dates"]]
+        if hist.get("arbitrage_dates") and hist.get("arbitrage_prices") and range_key != "hourly":
+            _ensure_today_tail(
+                hist["arbitrage_dates"],
+                [hist["arbitrage_prices"]],
+                preset["date_fmt"],
+                preset.get("max_points"),
+            )
 
     garanti_alis = local.get("garanti", {}).get("alis", 0) or 0
     garanti_satis = local.get("garanti", {}).get("satis", 0) or 0

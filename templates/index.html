@@ -4,8 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>GoldInsight</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='2') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='11') }}" />
 </head>
 <body>
   <div class="ticker-bar">
@@ -45,9 +46,10 @@
     <section class="section chart-controls">
       <div class="range-status" id="range-status">Grafik aralığı: Günlük</div>
       <div class="range-buttons">
-        <button class="range-btn active" data-range="daily">Günlük</button>
-        <button class="range-btn" data-range="weekly">Haftalık</button>
-        <button class="range-btn" data-range="yearly">Yıllık</button>
+        <button class="range-btn" data-range="hourly" type="button">Saatlik</button>
+        <button class="range-btn active" data-range="daily" type="button">Günlük</button>
+        <button class="range-btn" data-range="weekly" type="button">Haftalık</button>
+        <button class="range-btn" data-range="monthly" type="button">Aylık</button>
       </div>
     </section>
 
@@ -82,7 +84,10 @@
           <div class="info-box">ABD devlet tahvili faizi. Bu oran yükselirse yatırımcılar altına değil faize yönelir, altın düşebilir (Ters Korelasyon).</div>
         </div>
         <div class="card card-small">
-          <div class="card-title">Durum Özeti</div>
+          <div class="card-title-row">
+            <div class="card-title">Durum Özeti</div>
+            <button class="refresh-btn mini" id="status-refresh-btn" type="button">Analizi Yenile</button>
+          </div>
           <div class="status-text" id="market-comment">--</div>
         </div>
       </div>
@@ -139,6 +144,6 @@
     </section>
   </main>
 
-  <script src="{{ url_for('static', filename='script.js', v='2') }}"></script>
+  <script src="{{ url_for('static', filename='script.js', v='11') }}"></script>
 </body>
 </html>

@@ -4,6 +4,7 @@ let us10yChart = null;
 let gramChart = null;
 let arbitrageChart = null;
 let currentRange = "daily";
+let lastRenderedRange = "daily";
 
 const CHART_PALETTE = {
   ons: { pos: "#16c784", neg: "#ef4444", neu: "#f5c451" },
@@ -12,6 +13,132 @@ const CHART_PALETTE = {
   gram: { pos: "#34d399", neg: "#f87171", neu: "#fbbf24" },
   arbitrage: { pos: "#14b8a6", neg: "#ef4444", neu: "#f59e0b" },
 };
+
+const LABEL_FONT = "13px \"IBM Plex Mono\", monospace";
+const LABEL_TEXT_COLOR = "#c9d1d9";
+const LABEL_BG_COLOR = "rgba(13, 17, 23, 0.85)";
+const LABEL_BORDER_COLOR = "rgba(48, 54, 61, 0.9)";
+const LABEL_PADDING_X = 4;
+const LABEL_PADDING_Y = 2;
+const GRID_COLOR = "rgba(148, 163, 184, 0.12)";
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function hexToRgba(hex, alpha) {
+  if (!hex) return `rgba(255,255,255,${alpha})`;
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return `rgba(255,255,255,${alpha})`;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function makeGradientFill(color) {
+  return (context) => {
+    const { chart } = context;
+    const { ctx, chartArea } = chart;
+    if (!chartArea) {
+      return hexToRgba(color, 0.08);
+    }
+    const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    gradient.addColorStop(0, hexToRgba(color, 0.28));
+    gradient.addColorStop(1, hexToRgba(color, 0.02));
+    return gradient;
+  };
+}
+
+function formatChartValue(value) {
+  if (!Number.isFinite(value)) return "";
+  return value.toFixed(2);
+}
+
+function drawEdgeLabel(ctx, chartArea, x, y, text, position) {
+  if (!text) return;
+  ctx.save();
+  ctx.font = LABEL_FONT;
+  const textWidth = ctx.measureText(text).width;
+  const textHeight = 11;
+
+  const safeX = clamp(
+    x,
+    chartArea.left + LABEL_PADDING_X + textWidth / 2,
+    chartArea.right - LABEL_PADDING_X - textWidth / 2
+  );
+
+  const boxWidth = textWidth + LABEL_PADDING_X * 2;
+  const boxHeight = textHeight + LABEL_PADDING_Y * 2;
+  const boxY =
+    position === "top"
+      ? chartArea.top + 2
+      : chartArea.bottom - boxHeight - 2;
+  const boxX = safeX - boxWidth / 2;
+
+  ctx.fillStyle = LABEL_BG_COLOR;
+  ctx.strokeStyle = LABEL_BORDER_COLOR;
+  ctx.lineWidth = 1;
+  ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+  ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+
+  ctx.fillStyle = LABEL_TEXT_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText(text, safeX, boxY + LABEL_PADDING_Y);
+  ctx.restore();
+}
+
+const MIN_MAX_LABEL_PLUGIN = {
+  id: "minMaxLabel",
+  afterDatasetsDraw(chart, _args, opts) {
+    if (opts && opts.enabled === false) return;
+    const dataset = chart.data?.datasets?.[0];
+    if (!dataset || !Array.isArray(dataset.data) || dataset.data.length === 0) return;
+    const meta = chart.getDatasetMeta(0);
+    if (!meta || !meta.data || meta.data.length === 0) return;
+    const { chartArea, ctx } = chart;
+    if (!chartArea) return;
+
+    let minValue = Infinity;
+    let maxValue = -Infinity;
+    let minIndex = -1;
+    let maxIndex = -1;
+
+    dataset.data.forEach((raw, i) => {
+      const value = Number(raw);
+      if (!Number.isFinite(value)) return;
+      if (value < minValue) {
+        minValue = value;
+        minIndex = i;
+      }
+      if (value > maxValue) {
+        maxValue = value;
+        maxIndex = i;
+      }
+    });
+
+    if (minIndex === -1 || maxIndex === -1) return;
+
+    const maxPoint = meta.data[maxIndex];
+    if (maxPoint) {
+      const { x } = maxPoint.getProps ? maxPoint.getProps(["x"], true) : maxPoint;
+      drawEdgeLabel(ctx, chartArea, x, chartArea.top, formatChartValue(maxValue), "top");
+    }
+
+    if (minIndex !== maxIndex) {
+      const minPoint = meta.data[minIndex];
+      if (minPoint) {
+        const { x } = minPoint.getProps ? minPoint.getProps(["x"], true) : minPoint;
+        drawEdgeLabel(ctx, chartArea, x, chartArea.bottom, formatChartValue(minValue), "bottom");
+      }
+    }
+  },
+};
+
+if (window.Chart && window.Chart.register) {
+  window.Chart.register(MIN_MAX_LABEL_PLUGIN);
+}
 
 function trendColor(values, palette) {
   const pal = palette || CHART_PALETTE.ons;
@@ -29,6 +156,28 @@ function renderChart(chartInstance, ctx, labels, values, color) {
     chartInstance.data.labels = labels || [];
     chartInstance.data.datasets[0].data = values || [];
     chartInstance.data.datasets[0].borderColor = color;
+    chartInstance.data.datasets[0].backgroundColor = makeGradientFill(color);
+    chartInstance.data.datasets[0].fill = true;
+    chartInstance.data.datasets[0].tension = 0.35;
+    chartInstance.data.datasets[0].cubicInterpolationMode = "monotone";
+    chartInstance.data.datasets[0].pointRadius = 0;
+    chartInstance.data.datasets[0].pointHoverRadius = 3;
+    chartInstance.data.datasets[0].pointHitRadius = 10;
+    chartInstance.options.plugins = chartInstance.options.plugins || {};
+    chartInstance.options.plugins.minMaxLabel = { enabled: true };
+    chartInstance.options.scales = chartInstance.options.scales || {};
+    if (chartInstance.options.scales.x) {
+      chartInstance.options.scales.x.grid = {
+        color: GRID_COLOR,
+        drawBorder: false,
+      };
+    }
+    if (chartInstance.options.scales.y) {
+      chartInstance.options.scales.y.grid = {
+        color: GRID_COLOR,
+        drawBorder: false,
+      };
+    }
     chartInstance.update();
     return chartInstance;
   }
@@ -42,8 +191,15 @@ function renderChart(chartInstance, ctx, labels, values, color) {
           data: values || [],
           borderColor: color,
           borderWidth: 2,
-          fill: false,
+          backgroundColor: makeGradientFill(color),
+          fill: true,
           tension: 0.35,
+          cubicInterpolationMode: "monotone",
+          stepped: false,
+          pointRadius: 0,
+          pointHoverRadius: 3,
+          pointHitRadius: 10,
+          spanGaps: true,
         },
       ],
     },
@@ -51,10 +207,18 @@ function renderChart(chartInstance, ctx, labels, values, color) {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
+      interaction: {
+        mode: "index",
+        intersect: false,
+      },
       scales: {
         x: {
           display: true,
-          grid: { display: false },
+          grid: {
+            display: true,
+            color: GRID_COLOR,
+            drawBorder: false,
+          },
           ticks: {
             color: "#8b949e",
             maxTicksLimit: 4,
@@ -62,7 +226,11 @@ function renderChart(chartInstance, ctx, labels, values, color) {
         },
         y: {
           display: true,
-          grid: { display: false },
+          grid: {
+            display: true,
+            color: GRID_COLOR,
+            drawBorder: false,
+          },
           ticks: {
             color: "#8b949e",
             maxTicksLimit: 4,
@@ -71,8 +239,19 @@ function renderChart(chartInstance, ctx, labels, values, color) {
       },
       plugins: {
         legend: { display: false },
+        minMaxLabel: { enabled: true },
+        tooltip: {
+          backgroundColor: "rgba(15, 23, 42, 0.95)",
+          titleColor: "#e2e8f0",
+          bodyColor: "#e2e8f0",
+          borderColor: "rgba(148, 163, 184, 0.25)",
+          borderWidth: 1,
+          displayColors: false,
+          padding: 8,
+        },
       },
       elements: {
+        line: { borderJoinStyle: "round" },
         point: { radius: 0 },
       },
     },
@@ -101,6 +280,41 @@ function updateClock() {
   const ss = String(now.getSeconds()).padStart(2, "0");
   const clockEl = document.getElementById("system-time");
   if (clockEl) clockEl.textContent = `${hh}:${mm}:${ss}`;
+}
+
+function rangeLabel(rangeKey) {
+  if (rangeKey === "hourly") return "Saatlik";
+  if (rangeKey === "weekly") return "Haftalık";
+  if (rangeKey === "monthly") return "Aylık";
+  return "Günlük";
+}
+
+function setRangeStatus(count) {
+  const statusEl = document.getElementById("range-status");
+  if (!statusEl) return;
+  const label = rangeLabel(currentRange);
+  let suffix = "";
+  if (Number.isFinite(count)) {
+    if (currentRange === "hourly") {
+      suffix = ` (${count} x 10 dk)`;
+    } else {
+      suffix = ` (${count} gün)`;
+    }
+  }
+  statusEl.textContent = `Grafik aralığı: ${label}${suffix}`;
+}
+
+function resetCharts() {
+  if (onsChart) onsChart.destroy();
+  if (usdChart) usdChart.destroy();
+  if (us10yChart) us10yChart.destroy();
+  if (gramChart) gramChart.destroy();
+  if (arbitrageChart) arbitrageChart.destroy();
+  onsChart = null;
+  usdChart = null;
+  us10yChart = null;
+  gramChart = null;
+  arbitrageChart = null;
 }
 
 function trendText(value) {
@@ -336,6 +550,13 @@ async function updateDashboard() {
     const arbitrageValues = history.arbitrage_prices || [];
     const arbitrageLabels = history.arbitrage_dates || labels;
 
+    setRangeStatus(labels.length);
+
+    if (lastRenderedRange !== currentRange) {
+      resetCharts();
+      lastRenderedRange = currentRange;
+    }
+
     const onsCanvas = document.getElementById("onsChart");
     const usdCanvas = document.getElementById("usdChart");
     const us10yCanvas = document.getElementById("us10yChart");
@@ -420,27 +641,30 @@ if (refreshBtn) {
   });
 }
 
-const rangeButtons = document.querySelectorAll(".range-btn");
-if (rangeButtons && rangeButtons.length > 0) {
-  rangeButtons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      rangeButtons.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      currentRange = btn.dataset.range || "daily";
-      const statusEl = document.getElementById("range-status");
-      if (statusEl) {
-        const label =
-          currentRange === "weekly"
-            ? "Haftalık"
-            : currentRange === "yearly"
-              ? "Yıllık"
-              : "Günlük";
-        statusEl.textContent = `Grafik aralığı: ${label}`;
-      }
-      updateDashboard();
-    });
+const statusRefreshBtn = document.getElementById("status-refresh-btn");
+if (statusRefreshBtn) {
+  statusRefreshBtn.addEventListener("click", async () => {
+    statusRefreshBtn.disabled = true;
+    const originalText = statusRefreshBtn.textContent;
+    statusRefreshBtn.textContent = "Güncelleniyor...";
+    await updateDashboard();
+    statusRefreshBtn.textContent = originalText;
+    statusRefreshBtn.disabled = false;
   });
 }
+
+document.addEventListener("click", (event) => {
+  const btn = event.target.closest(".range-btn");
+  if (!btn) return;
+  event.preventDefault();
+  const group = btn.closest(".range-buttons");
+  if (!group) return;
+  group.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("active"));
+  btn.classList.add("active");
+  currentRange = btn.dataset.range || "daily";
+  setRangeStatus();
+  updateDashboard();
+});
 
 // Initial + interval
 updateDashboard();
