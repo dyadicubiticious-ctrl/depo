@@ -167,6 +167,36 @@ def get_global_data(range_key: str = "daily"):
                         return close_series
                 return None
 
+            def _download_daily(symbol: str):
+                try:
+                    df = yf.download(
+                        symbol,
+                        period="7d",
+                        interval="1d",
+                        progress=False,
+                        threads=False,
+                    )
+                except Exception:
+                    return None
+                if df is None or df.empty:
+                    return None
+                close_data = df.get("Close")
+                if close_data is None:
+                    return None
+                if isinstance(close_data, pd.DataFrame):
+                    if symbol in close_data.columns:
+                        close_series = close_data[symbol]
+                    elif close_data.shape[1] == 1:
+                        close_series = close_data.iloc[:, 0]
+                    else:
+                        return None
+                else:
+                    close_series = close_data
+                close_series = close_series.dropna()
+                if close_series.empty:
+                    return None
+                return close_series
+
             for key, symbols in tickers.items():
                 close_series = None
                 for symbol in symbols:
@@ -175,6 +205,22 @@ def get_global_data(range_key: str = "daily"):
                         break
                 if close_series is not None and not close_series.empty:
                     series_map[key] = close_series
+
+            # ONS intraday boş gelirse günlük kapanışla sabitle
+            if "ONS" not in series_map:
+                ref_index = None
+                if series_map:
+                    ref_index = next(iter(series_map.values())).index
+                for symbol in tickers["ONS"]:
+                    daily_series = _download_daily(symbol)
+                    if daily_series is None or daily_series.empty:
+                        continue
+                    last_val = float(daily_series.iloc[-1])
+                    if ref_index is not None:
+                        series_map["ONS"] = pd.Series([last_val] * len(ref_index), index=ref_index)
+                    else:
+                        series_map["ONS"] = pd.Series([last_val] * len(daily_series), index=daily_series.index)
+                    break
         else:
             primary_symbols = [symbols[0] for symbols in tickers.values()]
             hist_df = yf.download(
