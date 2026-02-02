@@ -132,34 +132,44 @@ def get_global_data(range_key: str = "daily"):
         intraday = interval in {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"}
 
         if intraday:
-            # Intraday'de çoklu sembol indirme bazen boş dönebildiği için tek tek çek
-            for key, symbol in tickers.items():
-                try:
-                    df = yf.download(
-                        symbol,
-                        period=preset["period"],
-                        interval=interval,
-                        progress=False,
-                        threads=False,
-                    )
-                except Exception:
-                    continue
-                if df is None or df.empty:
-                    continue
-                close_data = df.get("Close")
-                if close_data is None:
-                    continue
-                if isinstance(close_data, pd.DataFrame):
-                    if symbol in close_data.columns:
-                        close_series = close_data[symbol]
-                    elif close_data.shape[1] == 1:
-                        close_series = close_data.iloc[:, 0]
-                    else:
+            # Intraday'de tek tek çek + gerekirse daha geniş interval fallback
+            fallback_intervals = ["15m", "30m", "60m", "1h"]
+            interval_candidates = [interval] + [iv for iv in fallback_intervals if iv != interval]
+
+            def _download_close(symbol: str):
+                for iv in interval_candidates:
+                    try:
+                        df = yf.download(
+                            symbol,
+                            period=preset["period"],
+                            interval=iv,
+                            progress=False,
+                            threads=False,
+                        )
+                    except Exception:
                         continue
-                else:
-                    close_series = close_data
-                close_series = close_series.dropna()
-                if not close_series.empty:
+                    if df is None or df.empty:
+                        continue
+                    close_data = df.get("Close")
+                    if close_data is None:
+                        continue
+                    if isinstance(close_data, pd.DataFrame):
+                        if symbol in close_data.columns:
+                            close_series = close_data[symbol]
+                        elif close_data.shape[1] == 1:
+                            close_series = close_data.iloc[:, 0]
+                        else:
+                            continue
+                    else:
+                        close_series = close_data
+                    close_series = close_series.dropna()
+                    if not close_series.empty:
+                        return close_series
+                return None
+
+            for key, symbol in tickers.items():
+                close_series = _download_close(symbol)
+                if close_series is not None and not close_series.empty:
                     series_map[key] = close_series
         else:
             hist_df = yf.download(
@@ -461,19 +471,26 @@ def metrics():
     preset = HISTORY_PRESETS.get(preset_key, HISTORY_PRESETS["daily"])
     global_data = get_global_data(range_key=range_key)
     hist = global_data.get("history", {})
-    if hist.get("dates"):
-        arb_hist = get_arbitrage_history(range_key)
-        if arb_hist["dates"]:
-            hist["arbitrage_dates"] = arb_hist["dates"]
-            hist["arbitrage_prices"] = arb_hist["values"]
-        else:
-            arb_val = round(
-                (local.get("piyasa", {}).get("satis", 0) or 0)
-                - (local.get("garanti", {}).get("alis", 0) or 0),
-                2,
-            )
-            hist["arbitrage_dates"] = hist["dates"]
-            hist["arbitrage_prices"] = [arb_val for _ in hist["dates"]]
+        if hist.get("dates"):
+            arb_hist = get_arbitrage_history(range_key)
+            if arb_hist["dates"]:
+                hist["arbitrage_dates"] = arb_hist["dates"]
+                hist["arbitrage_prices"] = arb_hist["values"]
+            else:
+                arb_val = round(
+                    (local.get("piyasa", {}).get("satis", 0) or 0)
+                    - (local.get("garanti", {}).get("alis", 0) or 0),
+                    2,
+                )
+                hist["arbitrage_dates"] = hist["dates"]
+                hist["arbitrage_prices"] = [arb_val for _ in hist["dates"]]
+
+            # Saatlikte tek nokta gelirse grafiği doldurmak için hizala
+            if range_key == "hourly" and hist.get("dates"):
+                if len(hist["arbitrage_dates"]) < len(hist["dates"]):
+                    last_val = hist["arbitrage_prices"][-1] if hist["arbitrage_prices"] else 0
+                    hist["arbitrage_dates"] = hist["dates"]
+                    hist["arbitrage_prices"] = [last_val for _ in hist["dates"]]
         if hist.get("arbitrage_dates") and hist.get("arbitrage_prices") and range_key != "hourly":
             _ensure_today_tail(
                 hist["arbitrage_dates"],
