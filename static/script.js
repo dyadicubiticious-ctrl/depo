@@ -155,7 +155,8 @@ function getXAxisTickOptions() {
   if (currentRange === "hourly") {
     return {
       ...base,
-      autoSkip: false,
+      autoSkip: true,
+      maxTicksLimit: 8,
       maxRotation: 90,
       minRotation: 90,
       font: { size: 9 },
